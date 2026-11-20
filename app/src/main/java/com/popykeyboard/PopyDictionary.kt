@@ -22,6 +22,9 @@ object PopyDictionary {
     @Volatile private var loaded = false
     @Volatile private var loading = false
 
+    /** টাইপ করা শব্দের ব্যবহার-সংখ্যা সেরা বানানের ১/RARE_RATIO-এর কম হলে সেটিকে ভুল ধরা হয় */
+    private const val RARE_RATIO = 50L
+
     /** তালিকা লোড শেষ? (শেষ না হওয়া পর্যন্ত অটো-কারেকশন/সাজেশন কিছু করে না) */
     fun isReady(): Boolean = loaded && count > 0
 
@@ -124,13 +127,20 @@ object PopyDictionary {
         if (!isReady() || !isBanglaWord(word)) return word
         val w = composeNukta(word)
         val k = normKey(w)
-        var i = lowerBound(k)
-        val first = i
+        val first = lowerBound(k)
+        if (first >= count || normKey(wordAt(first)) != k) return word // তালিকায় এই কী-র কোনো শব্দ নেই
+        val best = wordAt(first) // একই কী-র মধ্যে সবচেয়ে বেশি ব্যবহৃত শব্দ
+        if (best == w) return word
+        // টাইপ করা শব্দ তালিকায় থাকলেও যদি অত্যন্ত বিরল হয় (ভুল বানান), তবে জনপ্রিয় বানানে ঠিক করা হয়।
+        // কাছাকাছি ব্যবহারের বৈধ শব্দ (যেমন শাল/সাল) অপরিবর্তিত থাকে।
+        var i = first
         while (i < count && normKey(wordAt(i)) == k) {
-            if (wordAt(i) == w) return word // তালিকায় হুবহু আছে
+            if (wordAt(i) == w) {
+                return if (freqs[i].toLong() * RARE_RATIO < freqs[first]) best else word
+            }
             i++
         }
-        return if (first < count && normKey(wordAt(first)) == k) wordAt(first) else word
+        return best
     }
 
     /** আগে একই কী-র শব্দ (বেশি ব্যবহৃত আগে), তারপর যেসব শব্দ টাইপ করা অক্ষর দিয়ে শুরু। */
