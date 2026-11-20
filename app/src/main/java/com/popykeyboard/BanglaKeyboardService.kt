@@ -162,12 +162,22 @@ class BanglaKeyboardService : InputMethodService(), KeyboardRoot.Listener {
      */
     private fun updateSuggestions() {
         val r = root ?: return
-        if (!autoCorrect || !bangla || buffer.isEmpty() || !PopyDictionary.isReady()) {
+        if (!autoCorrect || !bangla || buffer.isEmpty()) {
             r.setSuggestions(emptyList()); return
+        }
+        if (!PopyDictionary.isReady()) {
+            val err = PopyDictionary.lastError
+            r.setSuggestionNote(
+                if (PopyDictionary.isLoading()) "ডিকশনারি লোড হচ্ছে…"
+                else if (err.isNotEmpty()) "ডিকশনারি লোড হয়নি: $err"
+                else "ডিকশনারি তৈরি নয়"
+            )
+            return
         }
         val raw = BanglaPhonetic.convert(buffer.toString())
         val sug = PopyDictionary.suggestions(raw, 8)
-        r.setSuggestions(if (sug.isEmpty()) emptyList() else listOf(raw) + sug.filter { it != raw })
+        if (sug.isEmpty()) r.setSuggestionNote("কোনো মিল নেই")
+        else r.setSuggestions(listOf(raw) + sug.filter { it != raw })
     }
 
     /** [fix] = true হলে (স্পেস/এন্টার) অটো-কারেকশন চালু থাকলে ডিকশনারির বানানে বদলায় */

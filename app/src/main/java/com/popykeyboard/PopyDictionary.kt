@@ -21,6 +21,9 @@ object PopyDictionary {
     @Volatile private var count = 0
     @Volatile private var loaded = false
     @Volatile private var loading = false
+    /** লোড ব্যর্থ হলে কারণ (সাজেশন বারে দেখানোর জন্য); ফাঁকা = কোনো ত্রুটি নেই */
+    @Volatile var lastError: String = ""
+    fun isLoading(): Boolean = loading
 
     /** টাইপ করা শব্দের ব্যবহার-সংখ্যা সেরা বানানের ১/RARE_RATIO-এর কম হলে সেটিকে ভুল ধরা হয় */
     private const val RARE_RATIO = 50L
@@ -48,10 +51,12 @@ object PopyDictionary {
                         if (b0 == 0x1F && b1 == 0x8B) GZIPInputStream(bis, 1 shl 16) else bis
                     load(stream)
                 }
+                lastError = ""
                 onReady?.invoke()
             } catch (t: Throwable) {
                 // তালিকা না থাকলে/পড়া না গেলে অটো-কারেকশন ও সাজেশন বন্ধ থাকে; পরের ইনপুটে আবার চেষ্টা হবে
                 loaded = false
+                lastError = t.javaClass.simpleName + ": " + (t.message ?: "")
             } finally {
                 loading = false
             }

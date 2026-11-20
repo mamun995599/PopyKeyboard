@@ -187,6 +187,20 @@ class KeyboardRoot(
         for (item in items) row.addView(suggestionChip(item), chipParams())
     }
 
+    /** সাজেশন বারে সাধারণ (চাপ-অযোগ্য) বার্তা, যেমন ডিকশনারির অবস্থা */
+    fun setSuggestionNote(text: String) {
+        val row = suggestRow ?: return
+        val keep = if (previewText != null) 1 else 0
+        while (row.childCount > keep) row.removeViewAt(row.childCount - 1)
+        row.addView(TextView(context).apply {
+            this.text = text
+            textSize = 13f
+            setTextColor(colors.hint)
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding((8 * density).toInt(), 0, (8 * density).toInt(), 0)
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, (28 * density).toInt()))
+    }
+
     private fun chipParams() =
         LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, (28 * density).toInt())
             .apply { marginEnd = (6 * density).toInt() }
