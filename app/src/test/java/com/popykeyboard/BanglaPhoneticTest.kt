@@ -36,7 +36,8 @@ class BanglaPhoneticTest {
 
     @Test
     fun dictionaryCorrection() {
-        val data = "তুমি\t100\nতুমী\t1\nআমি\t50\n"
+        // ডিকশনারি ফাইল কী (নরমালাইজড শব্দ) অনুযায়ী সাজানো থাকে: আমি < তুমি/তুমী
+        val data = "আমি\t50\nতুমি\t100\nতুমী\t1\n"
         PopyDictionary.load(data.byteInputStream(Charsets.UTF_8))
         assertEquals("তুমি", PopyDictionary.correct("তুমী"))
         assertEquals("আমি", PopyDictionary.correct("আমি"))
