@@ -36,6 +36,10 @@ jobs:
       - name: Build debug APK
         run: gradle assembleDebug --stacktrace
 
+      - name: Verify dictionary is inside the APK
+        run: |
+          unzip -l app/build/outputs/apk/debug/*.apk | grep popy_words.txt.gz || { echo "::error::popy_words.txt.gz APK-তে নেই"; exit 1; }
+
       - uses: actions/upload-artifact@v4
         with:
           name: bangla-keyboard-debug

@@ -46,6 +46,17 @@ android {
     }
 }
 
+// ডিকশনারি ফাইল হারিয়ে গেলে (যেমন GitHub-এ আপলোডে বাদ পড়লে) বিল্ড শুরুতেই পরিষ্কার বার্তায় থামে
+val checkDictionary = tasks.register("checkDictionary") {
+    doLast {
+        val f = file("src/main/assets/popy_words.txt.gz")
+        if (!f.exists() || f.length() < 1_000_000L) {
+            throw GradleException("app/src/main/assets/popy_words.txt.gz নেই বা ছোট (মাপ ~2.3MB হওয়ার কথা)। ফাইলটি রিপোতে যোগ করুন।")
+        }
+    }
+}
+tasks.named("preBuild") { dependsOn(checkDictionary) }
+
 dependencies {
     // কোনো AndroidX/AppCompat লাগে না — শুধু Android framework ও Kotlin stdlib
     testImplementation("junit:junit:4.13.2")
