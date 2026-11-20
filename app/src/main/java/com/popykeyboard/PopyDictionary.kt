@@ -28,15 +28,30 @@ object PopyDictionary {
     /** তালিকা লোড শেষ? (শেষ না হওয়া পর্যন্ত অটো-কারেকশন/সাজেশন কিছু করে না) */
     fun isReady(): Boolean = loaded && count > 0
 
-    /** ব্যাকগ্রাউন্ড থ্রেডে লোড শুরু (একবারই)। [open] তালিকার gzip স্ট্রিম দেয়। */
-    fun preload(open: () -> InputStream) {
+    /**
+     * ব্যাকগ্রাউন্ড থ্রেডে লোড শুরু (একবারই)। [open] তালিকার স্ট্রিম দেয় (gzip হোক বা সাধারণ লেখা, দুটোই চলে)।
+     * লোড শেষ হলে [onReady] ব্যাকগ্রাউন্ড থ্রেডে ডাকা হয়; ব্যর্থ হলে পরের বার আবার চেষ্টা হয়।
+     */
+    fun preload(onReady: (() -> Unit)? = null, open: () -> InputStream) {
         if (loaded || loading) return
         loading = true
         Thread {
             try {
-                open().use { load(GZIPInputStream(it)) }
-            } catch (e: Exception) {
-                // তালিকা না থাকলে/পড়া না গেলে অটো-কারেকশন ও সাজেশন বন্ধ থাকে
+                open().use { raw ->
+                    val bis = java.io.BufferedInputStream(raw, 1 shl 16)
+                    bis.mark(2)
+                    val b0 = bis.read()
+                    val b1 = bis.read()
+                    bis.reset()
+                    // gzip-এর ম্যাজিক বাইট (1F 8B) থাকলে আনজিপ; না থাকলে (বিল্ড টুল আগেই খুলে দিলে) সরাসরি পড়া
+                    val stream: InputStream =
+                        if (b0 == 0x1F && b1 == 0x8B) GZIPInputStream(bis, 1 shl 16) else bis
+                    load(stream)
+                }
+                onReady?.invoke()
+            } catch (t: Throwable) {
+                // তালিকা না থাকলে/পড়া না গেলে অটো-কারেকশন ও সাজেশন বন্ধ থাকে; পরের ইনপুটে আবার চেষ্টা হবে
+                loaded = false
             } finally {
                 loading = false
             }

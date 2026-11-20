@@ -60,7 +60,12 @@ class BanglaKeyboardService : InputMethodService(), KeyboardRoot.Listener {
         super.onStartInputView(info, restarting)
         buffer.clear()
         autoCorrect = prefs.getBoolean(KeyboardRoot.PREF_AUTO, true)
-        if (autoCorrect) PopyDictionary.preload { assets.open("popy_words.txt.gz") }
+        if (autoCorrect) {
+            PopyDictionary.preload(onReady = {
+                // তালিকা লোড শেষ হলে চলমান শব্দের সাজেশন সঙ্গে সঙ্গে দেখাই
+                android.os.Handler(android.os.Looper.getMainLooper()).post { updateSuggestions() }
+            }) { assets.open("popy_words.txt.gz") }
+        }
         // সেটিংসে উচ্চতা/প্রিভিউ/সাজেশন বদলালে কিবোর্ড নতুন করে বানাই
         if (root != null && (prefs.getInt("height_pct", 100) != appliedHeight ||
                 prefs.getBoolean(KeyboardRoot.PREF_PREVIEW, false) != appliedPreview ||
