@@ -49,9 +49,9 @@ android {
 // ডিকশনারি ফাইল হারিয়ে গেলে (যেমন GitHub-এ আপলোডে বাদ পড়লে) বিল্ড শুরুতেই পরিষ্কার বার্তায় থামে
 val checkDictionary = tasks.register("checkDictionary") {
     doLast {
-        val f = file("src/main/assets/popy_words.txt.gz")
+        val f = file("src/main/assets/popy_words.dat")
         if (!f.exists() || f.length() < 1_000_000L) {
-            throw GradleException("app/src/main/assets/popy_words.txt.gz নেই বা ছোট (মাপ ~2.3MB হওয়ার কথা)। ফাইলটি রিপোতে যোগ করুন।")
+            throw GradleException("app/src/main/assets/popy_words.dat নেই বা ছোট (মাপ ~2.3MB হওয়ার কথা)। ফাইলটি রিপোতে যোগ করুন।")
         }
     }
 }
