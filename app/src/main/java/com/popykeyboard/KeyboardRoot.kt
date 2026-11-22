@@ -173,7 +173,8 @@ class KeyboardRoot(
     /** চলমান শব্দের ইংরেজি অক্ষর (প্রিভিউ প্যানেল চালু থাকলে); ফাঁকা হলে প্যানেল লুকায় */
     fun setTyped(text: String) {
         val tv = previewText ?: return
-        tv.text = text
+        // ⇧ = শিফট (যুক্ত কী) ট্যাপের টোকেন
+        tv.text = text.replace(BanglaPhonetic.SH, '\u21E7')
         tv.visibility = if (text.isEmpty()) {
             if (suggestRow != null) View.GONE else View.INVISIBLE
         } else View.VISIBLE
@@ -306,5 +307,7 @@ class KeyboardRoot(
     companion object {
         const val PREF_PREVIEW = "preview_panel"
         const val PREF_AUTO = "auto_correct"
+        /** পপি গ্রিডি মোড (ডিফল্ট চালু) */
+        const val PREF_GREEDY = "popy_greedy"
     }
 }

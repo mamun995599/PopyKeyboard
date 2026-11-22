@@ -60,6 +60,7 @@ class BanglaKeyboardService : InputMethodService(), KeyboardRoot.Listener {
         super.onStartInputView(info, restarting)
         buffer.clear()
         autoCorrect = prefs.getBoolean(KeyboardRoot.PREF_AUTO, true)
+        BanglaPhonetic.greedy = prefs.getBoolean(KeyboardRoot.PREF_GREEDY, true)
         if (autoCorrect) {
             PopyDictionary.preload(onReady = {
                 // তালিকা লোড শেষ হলে চলমান শব্দের সাজেশন সঙ্গে সঙ্গে দেখাই
@@ -134,9 +135,9 @@ class BanglaKeyboardService : InputMethodService(), KeyboardRoot.Listener {
         val ic = currentInputConnection ?: return
         val p = BanglaPhonetic.preview(buffer.toString())
         val shown: CharSequence = if (p.markerIndex >= 0) {
-            // o = লাল, q = সবুজ মার্কার; পরের অক্ষর এলে নিজে সরে যায়
+            // o = লাল, q = সবুজ, s (শিফট) = নীল মার্কার; পরের অক্ষর এলে নিজে সরে যায়
             SpannableString(p.text).apply {
-                val color = if (p.marker == 'o') MARK_RED else MARK_GREEN
+                val color = when (p.marker) { 'o' -> MARK_RED; 's' -> MARK_BLUE; else -> MARK_GREEN }
                 setSpan(
                     ForegroundColorSpan(color), p.markerIndex, p.markerIndex + 1,
                     Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
@@ -299,18 +300,21 @@ class BanglaKeyboardService : InputMethodService(), KeyboardRoot.Listener {
     }
 
     /**
-     * বাংলা মোডে শিফট = ` (জোর-যুক্ত)। শেষ অক্ষর ব্যঞ্জন হলে হসন্ত বসে, আর পরের ব্যঞ্জন
-     * ১৬৩ জোড়ার তালিকায় না থাকলেও যুক্ত হয় (যেমন k, শিফট, f = ক্ফ)। ব্যঞ্জন না হলে কিছু হয় না।
+     * বাংলা মোডে শিফট (যুক্ত কী) ট্যাপ = "স্বয়ংক্রিয় মিলন নয়" টোকেন (SH)। একবারই কাজ করে (বারবার চাপলেও একটি),
+     * শব্দের শুরুতে কিছু হয় না, Backspace দিলে মুছে যায়।
+     *  • গ্রিডি চালু: ব্যঞ্জনের আগে জোর করে যুক্ত (t, শিফট, t = ত্ত; k, শিফট, f = ক্ফ), স্বরের আগে স্বাধীন স্বর
+     *    (bo, শিফট, i = বই); নীল `s` মার্কার দেখা যায়।
+     *  • গ্রিডি বন্ধ: পোস্টফিক্স — লেখা শেষ ব্যঞ্জনকে আগেরটির সাথে যুক্ত করে (km, শিফট = ক্ম),
+     *    কারের পরে হলে কারকে স্বাধীন স্বর করে (ka, শিফট = কআ)।
      */
-    private fun forceJoin() {
-        if (buffer.isEmpty() || buffer.endsWith("`")) return
-        if (!BanglaPhonetic.canForceJoin(buffer.toString())) return
-        buffer.append('`')
+    private fun shiftTap() {
+        if (buffer.isEmpty() || buffer.last() == BanglaPhonetic.SH) return
+        buffer.append(BanglaPhonetic.SH)
         updateComposing()
     }
 
     override fun onShift() {
-        if (bangla) { forceJoin(); return }
+        if (bangla) { shiftTap(); return }
         val now = SystemClock.uptimeMillis()
         shift = when {
             shift == ShiftState.CAPS -> ShiftState.OFF
@@ -376,5 +380,6 @@ class BanglaKeyboardService : InputMethodService(), KeyboardRoot.Listener {
     private companion object {
         const val MARK_RED = 0xFFE53935.toInt()
         const val MARK_GREEN = 0xFF1E9E45.toInt()
+        const val MARK_BLUE = 0xFF1E6FE5.toInt()
     }
 }

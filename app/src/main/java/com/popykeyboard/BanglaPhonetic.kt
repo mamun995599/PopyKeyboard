@@ -14,6 +14,22 @@ object BanglaPhonetic {
     private const val ZWJ = "\u200D"
     private const val NUKTA = "়"
 
+    /**
+     * শিফট-ট্যাপ টোকেন (বাফারে \u0001)। "স্বয়ংক্রিয় মিলন নয়" কী: ব্যঞ্জনের আগে জোর করে যুক্ত
+     * (t⇧t = ত্ত, k⇧f = ক্ফ), স্বরের আগে স্বাধীন স্বর (bo⇧i = বই)।
+     */
+    const val SH = '\u0001'
+
+    /**
+     * গ্রিডি মোড (ডিফল্ট চালু): তালিকার ১৬৩ জোড়া নিজে যুক্ত হয়, শিফট প্রিফিক্স (ব্যঞ্জনের আগে)।
+     * বন্ধ: কিছুই নিজে যুক্ত হয় না; র, য স্বাধীন; শিফট পোস্টফিক্স: লেখা শেষ ব্যঞ্জনকে আগেরটির সাথে
+     * যুক্ত করে (km⇧ = ক্ম), কারের পরে হলে কারকে স্বাধীন স্বর করে (ka⇧ = কআ, ko⇧ = কঅ)।
+     */
+    @Volatile var greedy: Boolean = true
+
+    private fun isConsLetter(ch: Char): Boolean =
+        ch in 'ক'..'হ' || ch == '\u09DC' || ch == '\u09DD' || ch == '\u09DF' || ch == '\u09CE' || ch == '\u09BC'
+
     // ----- ব্যঞ্জন -----
     private val consonants: Map<String, String> = mapOf(
         "k" to "ক", "kh" to "খ", "g" to "গ", "gh" to "ঘ", "nng" to "ঙ",
@@ -49,7 +65,7 @@ object BanglaPhonetic {
 
     private fun isLetter(c: Char) = c in 'a'..'z'
 
-    /** টাইপ চলাকালীন দেখানোর ফল। [markerIndex] >= 0 হলে ওই অবস্থানের অক্ষরটি রঙিন মার্কার ('o' লাল, 'q' সবুজ)। */
+    /** টাইপ চলাকালীন দেখানোর ফল। [markerIndex] >= 0 হলে ওই অবস্থানের অক্ষরটি রঙিন মার্কার ('o' লাল, 'q' সবুজ, 's' = শিফট নীল)। */
     class Preview(val text: String, val markerIndex: Int, val marker: Char, val endsWithConsonant: Boolean = false)
 
     /** ল্যাটিন লেখা → বাংলা (চূড়ান্ত, মার্কার ছাড়া)। */
@@ -61,82 +77,101 @@ object BanglaPhonetic {
      */
     fun preview(input: String): Preview = run(input, true)
 
+
+    /**
+     * যে ১৬৩টি ব্যঞ্জন-জোড়া (প্রথম + দ্বিতীয়) নিজে থেকে যুক্ত হয়। রেফ (র) সবার সাথে যুক্ত হয়।
+     * বাকি জোড়া শিফট-ট্যাপ দিয়ে জোর করে যুক্ত করতে হয়।
+     */
+    private val PAIRS: Set<String> = """
+        কক কট কত কদ কন কম কয কর কল কষ
+        কস খয খর গগ গধ গন গম গয গর গল
+        ঘন ঘয ঘর ঙক ঙখ ঙগ ঙঘ ঙম ঙয ঙর
+        চচ চছ চঞ চয ছয ছর জজ জঝ জঞ জয
+        জর ঝয ঞচ ঞছ ঞজ ঞঝ টট টম টয টর
+        ঠয ডড ডম ডয ডর ঢয ঢর ণট ণঠ ণড
+        ণঢ ণম ণয তন তম তয তর থয থর দগ
+        দঘ দভ দম দয দর ধন ধম ধয ধর নট
+        নঠ নড নত নথ নদ নধ নম নয নস পট
+        পত পথ পন পপ পয পর পল পস ফট ফয
+        ফর ফল বজ বদ বধ বয বর বল ভয ভর
+        ভল মন মপ মফ মভ মম ময মর মল যয
+        লক লগ লট লড লপ লফ লম লয লল শচ
+        শছ শত শন শম শয শর শল ষক ষট ষঠ
+        ষণ ষপ ষফ ষম ষয সক সখ সট সত সথ
+        সন সপ সফ সম সয সর সল হণ হন হম
+        হয হর হল
+    """.trim().split(Regex("\\s+")).toHashSet()
+
+    private fun joinable(a: Char, b: Char): Boolean = a == 'র' || PAIRS.contains("$a$b")
+
     private fun endsWithPlainRa(out: StringBuilder): Boolean =
         out.isNotEmpty() && out[out.length - 1] == 'র' &&
             (out.length < 2 || out[out.length - 2] != HASANTA[0])
-
-    /**
-     * ১৬৩টি ব্যঞ্জন-জোড়া যা নিজে থেকে যুক্ত হয় (প্রথম+দ্বিতীয়, হেক্স কোড-পয়েন্ট)।
-     * বাকি সব জোড়া আলাদা থাকে; q বা ` (শিফট) দিলে জোর করে যুক্ত হয়। রেফ (র) সব ব্যঞ্জনের সাথে যুক্ত হয়।
-     * উৎস: পিসি ভার্সনের clsPopyPhonetic.pas (conjunct_list_v2, ধারা ১+২)।
-     */
-    private const val PAIRS_HEX =
-        "09950995,0995099F,099509A4,099509A6,099509A8,099509AE,099509AF,099509B0,099509B2," +
-            "099509B7,099509B8,099609AF,099609B0,09970997,099709A7,099709A8,099709AE,099709AF," +
-            "099709B0,099709B2,099809A8,099809AF,099809B0,09990995,09990996,09990997,09990998," +
-            "099909AE,099909AF,099909B0,099A099A,099A099B,099A099E,099A09AF,099B09AF,099B09B0," +
-            "099C099C,099C099D,099C099E,099C09AF,099C09B0,099D09AF,099E099A,099E099B,099E099C," +
-            "099E099D,099F099F,099F09AE,099F09AF,099F09B0,09A009AF,09A109A1,09A109AE,09A109AF," +
-            "09A109B0,09A209AF,09A209B0,09A3099F,09A309A0,09A309A1,09A309A2,09A309AE,09A309AF," +
-            "09A409A8,09A409AE,09A409AF,09A409B0,09A509AF,09A509B0,09A60997,09A60998,09A609AD," +
-            "09A609AE,09A609AF,09A609B0,09A709A8,09A709AE,09A709AF,09A709B0,09A8099F,09A809A0," +
-            "09A809A1,09A809A4,09A809A5,09A809A6,09A809A7,09A809AE,09A809AF,09A809B8,09AA099F," +
-            "09AA09A4,09AA09A5,09AA09A8,09AA09AA,09AA09AF,09AA09B0,09AA09B2,09AA09B8,09AB099F," +
-            "09AB09AF,09AB09B0,09AB09B2,09AC099C,09AC09A6,09AC09A7,09AC09AF,09AC09B0,09AC09B2," +
-            "09AD09AF,09AD09B0,09AD09B2,09AE09A8,09AE09AA,09AE09AB,09AE09AD,09AE09AE,09AE09AF," +
-            "09AE09B0,09AE09B2,09AF09AF,09B20995,09B20997,09B2099F,09B209A1,09B209AA,09B209AB," +
-            "09B209AE,09B209AF,09B209B2,09B6099A,09B6099B,09B609A4,09B609A8,09B609AE,09B609AF," +
-            "09B609B0,09B609B2,09B70995,09B7099F,09B709A0,09B709A3,09B709AA,09B709AB,09B709AE," +
-            "09B709AF,09B80995,09B80996,09B8099F,09B809A4,09B809A5,09B809A8,09B809AA,09B809AB," +
-            "09B809AE,09B809AF,09B809B0,09B809B2,09B909A3,09B909A8,09B909AE,09B909AF,09B909B0," +
-            "09B909B2"
-
-    private val joinPairs: HashSet<Int> = HashSet<Int>().also { set ->
-        for (p in PAIRS_HEX.split(',')) {
-            if (p.length == 8) set.add((p.substring(0, 4).toInt(16) shl 16) or p.substring(4, 8).toInt(16))
-        }
-    }
-
-    private const val RA = 'র'
-    private const val YA = 'য'
-
-    /** ব্যঞ্জন a + হসন্ত + b নিজে থেকে যুক্ত হয় কি? র (রেফ) সব ব্যঞ্জনের সাথে যুক্ত হয়। */
-    private fun joinablePair(a: Char, b: Char): Boolean =
-        a == RA || joinPairs.contains((a.code shl 16) or b.code)
 
     private fun run(input: String, preview: Boolean): Preview {
         // শুধু A–Z ছোট হাতের করা হয় (দৈর্ঘ্য অপরিবর্তিত থাকে)
         val src = buildString(input.length) {
             for (ch in input) append(if (ch in 'A'..'Z') (ch + 32) else ch)
         }
+        val n = src.length
         val out = StringBuilder()
         // consAfter = সর্বশেষ আউটপুট একটি ব্যঞ্জন (কার/যুক্তাক্ষর নেওয়ার জন্য প্রস্তুত)
         var consAfter = false
         var wordStart = true
         // শব্দের শুরুর 'র' — এর পর z এলে রেফ নয়, র‍্য (য-ফলা) হয়
         var raInitial = false
-        // স্বরের পরে q দিয়ে ভাঙা হয়েছে — পরের z এ য-ফলা হবে না (অযথা = oqzotha);
-        // ব্যঞ্জনের পরে q দিলে পরের ব্যঞ্জন জোর করে যুক্ত হয়
+        // q দিয়ে ভাঙা হয়েছে — পরের z এ য-ফলা হবে না (অযথা = oqzotha)
         var qBreak = false
-        // ` (শিফট) চাপা হয়েছে: পরের ব্যঞ্জন তালিকায় না থাকলেও যুক্ত হবে
-        var force = false
-        // সর্বশেষ ব্যঞ্জন-টোকেন (যেমন "t", "nn") — q-এর অর্থ ঠিক করতে লাগে
-        var lastConsTok = ""
-        var lastLetter = '\u0000'
-        // সর্বশেষ ব্যঞ্জন র-ফলা/য-ফলা হলে তার পরে নিজে থেকে আর যুক্ত হয় না
+        // সর্বশেষ ব্যঞ্জন-টোকেন ("t", "nn") ও তার শেষ বর্ণ (যুক্তাক্ষরের তালিকা মেলাতে)
+        var last = ""
+        var lastLetter = ' '
+        // শেষ ব্যঞ্জন র-ফলা/য-ফলা হলে তার পরে নিজে থেকে যুক্ত হয় না
         var phala = false
-        // শেষ টোকেনটি মার্কার-যোগ্য হলে: 'o' / 'q' (আউটপুটে অদৃশ্য), 'Q' (আউটপুটে আক্ষরিক q আছে)
+        // শিফট ট্যাপ হয়েছে: পরের ব্যঞ্জন যুক্ত হবে / পরের স্বর স্বাধীন হবে
+        var shift = false
+        // শেষ টোকেনটি মার্কার-যোগ্য হলে: 'o' / 'q' / 's' (আউটপুটে অদৃশ্য), 'Q' (আউটপুটে আক্ষরিক q আছে)
         var pending = ' '
+        // নন-গ্রিডি: শিফট পোস্টফিক্স। lStart = শেষ ব্যঞ্জন আউটপুটের যে অবস্থানে শুরু (-1 = নেই)
+        var lStart = -1
+        var lTok = ""
+        var lRa = false
+        // কারের পরে শিফট: (কারের অবস্থান, স্বাধীন রূপ)
+        var lVowSt = -1
+        var lVowInd = ""
         var i = 0
 
-        while (i < src.length) {
+        while (i < n) {
             val c = src[i]
-            val wasRaInitial = raInitial
+            if (c == SH && !greedy) {
+                if (lVowSt >= 0) {
+                    out.setLength(lVowSt); out.append(lVowInd)
+                    lVowSt = -1
+                }
+                if (lStart > 0) {
+                    val prev = out[lStart - 1]
+                    if (isConsLetter(prev) || (lTok == "z" && prev in '\u0985'..'\u0994')) {
+                        out.insert(lStart, if (lRa) "$ZWJ$HASANTA" else HASANTA)
+                    }
+                }
+                lStart = -1
+                i++
+                pending = ' '
+                continue
+            }
+            if (c == SH) { // শিফট ট্যাপ: পরের কী কাজে লাগালে 's' সরে যায়
+                shift = true
+                i++
+                pending = if (i == n) 's' else ' '
+                continue
+            }
+            lStart = -1
+            lVowSt = -1
+            val wasRa = raInitial
             raInitial = false
-            val wasQBreak = qBreak
+            val wasQ = qBreak
             qBreak = false
-            val wasForce = force
-            force = false
+            val wasShift = shift
+            shift = false
             pending = ' '
 
             // হসন্ত + ZWNJ  ( ,, )
@@ -144,121 +179,75 @@ object BanglaPhonetic {
                 out.append(HASANTA).append(ZWNJ); consAfter = false; wordStart = false; i += 2; continue
             }
 
-            // ` = জোর-যুক্ত: ব্যঞ্জনের পর হসন্ত বসে, পরের ব্যঞ্জন তালিকায় না থাকলেও যুক্ত হয়
-            if (c == '`' && consAfter) {
-                if (!wasForce) out.append(HASANTA) // পরপর দ্বিতীয় ` কিছু বদলায় না
-                force = true
-                i += 1; continue
-            }
-
             if (c == 'q') {
-                val nx = if (i + 1 < src.length) src[i + 1] else '\u0000'
-
-                // qw = ঃ (বিসর্গ)
-                if (nx == 'w') {
-                    out.append("ঃ"); consAfter = false; wordStart = false; i += 2; continue
-                }
-                // q. = ?   q, = !
+                val nx = if (i + 1 < n) src[i + 1] else ' '
+                if (nx == 'w') { out.append("ঃ"); consAfter = false; wordStart = false; i += 2; continue }
                 if (nx == '.' || nx == ',') {
                     out.append(if (nx == '.') '?' else '!')
                     consAfter = false; wordStart = true; i += 2; continue
                 }
-                // qq = ঁ (চন্দ্রবিন্দু) — ব্যঞ্জনের পরেও (চঁআ = cqqa)
-                if (nx == 'q') {
-                    out.append("ঁ"); consAfter = false; wordStart = false; i += 2; continue
-                }
-                // স্বাধীন বর্ণ, জোড়া লাগে না: qh = হ, qz = য (রেফ-য ছাড়া), qs = ষ, qx = ক্স
+                if (nx == 'q') { out.append("ঁ"); consAfter = false; wordStart = false; i += 2; continue }
                 if (nx == 'h') {
-                    out.append("হ"); lastLetter = 'হ'; consAfter = true; wordStart = false
-                    lastConsTok = "h"; i += 2; continue
+                    lStart = out.length; lTok = "h"; lRa = false
+                    out.append("হ"); consAfter = true; wordStart = false; last = "h"; lastLetter = 'হ'; i += 2; continue
                 }
                 if (nx == 'z' && !(consAfter && endsWithPlainRa(out))) {
-                    out.append("য"); lastLetter = YA; consAfter = true; wordStart = false
-                    lastConsTok = "z"; i += 2; continue
+                    lStart = out.length; lTok = "z"; lRa = false
+                    out.append("য"); consAfter = true; wordStart = false; last = "z"; lastLetter = 'য'; i += 2; continue
                 }
-                // qs = ষ (স্বাধীন); স-এর ঠিক পরে q ভাঙার চিহ্ন (sqs = স্স)
-                if (nx == 's' && !(consAfter && lastConsTok == "s")) {
-                    out.append("ষ"); lastLetter = 'ষ'; consAfter = true; wordStart = false
-                    lastConsTok = "sss"; i += 2; continue
+                if (nx == 's' && !(consAfter && last == "s")) {
+                    if (consAfter && wasShift) out.append(HASANTA)
+                    lStart = out.length; lTok = "sss"; lRa = false
+                    out.append("ষ"); consAfter = true; wordStart = false; last = "sss"; lastLetter = 'ষ'; i += 2; continue
                 }
                 if (nx == 'x') {
                     out.append("ক").append(HASANTA).append("স")
-                    lastLetter = 'স'; consAfter = true; wordStart = false
-                    lastConsTok = "x"; i += 2; continue
+                    consAfter = true; wordStart = false; last = "x"; lastLetter = 'স'; i += 2; continue
                 }
-                // q + স্বর = স্বাধীন স্বর, ব্যঞ্জনের পরেও (qa = আ, qi = ই, qoo = ও)
-                var qVowel = false
-                var vl = minOf(2, src.length - i - 1)
-                while (vl >= 1) {
-                    val vt = src.substring(i + 1, i + 1 + vl)
-                    val vv = if (vt == "rrr") null else vowels[vt]
-                    if (vv != null) {
-                        out.append(vv.first)
-                        consAfter = false; wordStart = false; i += 1 + vl
-                        qVowel = true
-                        break
-                    }
-                    vl--
+                if (nx == 'n' && !(consAfter && (last == "n" || last == "nn"))) {
+                    // ঞ-ও তালিকা মানে; শিফট জোর করে যুক্ত করে
+                    if (consAfter && (wasShift || (greedy && joinable(lastLetter, 'ঞ')))) out.append(HASANTA)
+                    lStart = out.length; lTok = "nnn"; lRa = false
+                    out.append("ঞ"); consAfter = true; wordStart = false; last = "nnn"; lastLetter = 'ঞ'; i += 2; continue
                 }
-                if (qVowel) continue
-                // qn = ঞ (nnn-এর মতোই, যুক্ত হয়)। ব্যতিক্রম: ন/ণ-এর ঠিক পরে q ভাঙার চিহ্ন (ন্ন = nqn)
-                if (nx == 'n' && !(consAfter && (lastConsTok == "n" || lastConsTok == "nn"))) {
-                    if (consAfter) out.append(HASANTA)
-                    out.append("ঞ"); lastLetter = 'ঞ'; consAfter = true; wordStart = false
-                    lastConsTok = "nnn"; i += 2; continue
-                }
-                // qr = ঋ (শুরুতে/স্বরের পরে) বা ৃ (ব্যঞ্জনের পরে); র-এর ঠিক পরে q ভাঙার চিহ্ন (rqr = র্র)
-                if (nx == 'r' && !(consAfter && lastConsTok == "r")) {
+                if (nx == 'r' && !(consAfter && last == "r")) {
+                    // qr = ঋ (শুরুতে/স্বরের পরে) বা ৃ (ব্যঞ্জনের পরে); র-এর পরে q শুধু বিভাজক
                     out.append(if (consAfter) "ৃ" else "ঋ")
                     consAfter = false; wordStart = false; i += 2; continue
                 }
                 if (consAfter) {
-                    // rqz = র‍্য (র-এর সাথে য-ফলা, রেফ নয়)
                     if (nx == 'z' && endsWithPlainRa(out)) {
                         out.append(ZWJ).append(HASANTA).append("য")
-                        lastLetter = YA; consAfter = true; wordStart = false
-                        lastConsTok = "z"; i += 2; continue
+                        consAfter = true; wordStart = false; last = "z"; lastLetter = 'য'; i += 2; continue
                     }
-                    val after = if (i + 2 < src.length) src[i + 2] else ' '
-                    // qt = ৎ ব্যঞ্জনের পরেও (জগৎ = jogqt)। ব্যতিক্রম: ত/ট-এর ঠিক পরে q ভাঙার চিহ্ন
-                    // (ত্ত = tqt, ট্ট = ttqtt) এবং th/tt (ত্থ = tqth)
-                    if (src.startsWith("qt", i) && after != 'h' && after != 't' &&
-                        lastConsTok != "t" && lastConsTok != "tt"
-                    ) {
+                    val after = if (i + 2 < n) src[i + 2] else ' '
+                    if (src.startsWith("qt", i) && after != 'h' && after != 't' && last != "t" && last != "tt") {
                         out.append("ৎ"); consAfter = false; wordStart = false; i += 2; continue
                     }
-                    // ব্যঞ্জনের পরে q = ভাঙার চিহ্ন (টোকেন ভাগ করে), পরের ব্যঞ্জন জোর করে যুক্ত হয়
-                    qBreak = true
+                    // অন্য q: কিছু আসে না, শুধু টোকেন ভাগ করে (tqt = তত)
                     i += 1
-                    if (i == src.length) pending = 'q'
+                    qBreak = true
+                    if (i == n) pending = 'q'
                     continue
                 }
-                // স্বরের পরে / শুরুতে: বিশেষ চিহ্ন
-                when {
-                    src.startsWith("qt", i) -> { out.append("ৎ"); wordStart = false; i += 2; continue }
-                    src.startsWith("qk", i) -> { out.append("৳"); wordStart = false; i += 2; continue }
-                }
-                // স্বর ভাঙতে q (boqi = বই)
-                if (!wordStart && i + 1 < src.length && isLetter(src[i + 1])) {
-                    qBreak = true
-                    i += 1; continue
-                }
-                // শুধু q: q-ই থাকে
+                if (src.startsWith("qt", i)) { out.append("ৎ"); wordStart = false; i += 2; continue }
+                if (src.startsWith("qk", i)) { out.append("৳"); wordStart = false; i += 2; continue }
+                if (i + 1 < n && isLetter(src[i + 1])) { qBreak = true; i += 1; continue } // q + অন্য অক্ষর: q চলে যায়
                 out.append('q'); consAfter = false; wordStart = false; i += 1
-                if (i == src.length) pending = 'Q'
+                if (i == n) pending = 'Q'
                 continue
             }
 
             // সবচেয়ে বড় টোকেন আগে (৩ → ২ → ১)
             var matched = false
-            var len = minOf(3, src.length - i)
+            var len = minOf(3, n - i)
             while (len >= 1) {
                 val tok = src.substring(i, i + len)
 
                 // w: ব্যঞ্জনের পরে ব-ফলা, অন্যথায় (শুরুতে/স্বরের পরে) ও
                 if (tok == "w") {
                     if (consAfter) {
-                        out.append(HASANTA).append("ব"); lastLetter = 'ব'; consAfter = true; lastConsTok = "w"
+                        out.append(HASANTA).append("ব"); consAfter = true; last = "w"; lastLetter = 'ব'
                     } else {
                         out.append("ও"); consAfter = false
                     }
@@ -275,51 +264,47 @@ object BanglaPhonetic {
                 val cons = consonants[tok]
                 if (cons != null) {
                     val startsWord = wordStart && !consAfter
-                    val l = out.length
                     val wasPhala = phala
                     phala = false
-                    if (tok == "z" && !consAfter && !wasQBreak && l >= 1 &&
-                        out[l - 1] in '\u0985'..'\u0994'
+                    if (tok == "z" && !consAfter && !wasQ && out.isNotEmpty() &&
+                        out[out.length - 1] in '\u0985'..'\u0994' &&
+                        (greedy || wasShift)
                     ) {
                         // স্বরবর্ণের সাথে য-ফলা: অ্যা = oza  (ভাঙতে q: অযথা = oqzotha)
                         out.append(HASANTA).append(cons)
                         phala = true
-                    } else if (tok == "z" && consAfter && wasRaInitial) {
+                    } else if (tok == "z" && consAfter && wasRa && (greedy || wasShift)) {
                         // র‍্য : র + ZWJ + হসন্ত + য
                         out.append(ZWJ).append(HASANTA).append(cons)
                         phala = true
                     } else {
-                        // হসন্ত বসে: শুধু ১৬৩ জোড়ায়, অথবা q (qBreak) দিলে; ` দিলে হসন্ত আগেই বসেছে।
-                        // র-ফলা/য-ফলার পরে শুধু q বা ` যুক্ত করে (র-ফলার পর য-ফলা চলে: brzan)।
-                        // b ও y নিজে থেকে কখনো যুক্ত হয় না (ব-ফলা = w)।
-                        var joined = wasForce
-                        if (consAfter && !wasForce && tok != "b" && tok != "y" &&
-                            (wasQBreak ||
-                                (tok == "z" && lastConsTok == "y") || // য়-এর পর য-ফলা চলে (yz = য়্য)
-                                ((!wasPhala || (tok == "z" && lastLetter == RA)) &&
-                                    joinablePair(lastLetter, cons[0])))
-                        ) {
+                        // গ্রিডি অংশ: শুধু তালিকার ১৬৩ জোড়া নিজে যুক্ত হয়; b ও y নিজে যুক্ত হয় না;
+                        // র-ফলা/য-ফলার পরে কিছু যুক্ত হয় না (র-ফলার পরে য-ফলা চলে: ব্র্যান; য়্য চলে)।
+                        // শিফট ট্যাপ জোর করে যুক্ত করে। য় কখনো ফলা হয় না।
+                        var joined = false
+                        if (consAfter && tok != "y" && (wasShift || (greedy && tok != "b" && (
+                                (tok == "z" && last == "y") ||
+                                    ((!wasPhala || (tok == "z" && lastLetter == 'র')) && joinable(lastLetter, cons[0]))))))
+                        {
                             out.append(HASANTA)
                             joined = true
                         }
-                        if (tok == "y" && wasForce && out.isNotEmpty() && out[out.length - 1] == HASANTA[0]) {
-                            out.setLength(out.length - 1) // য় কখনো ফলা হয় না: জোড়ক বাদ
-                            joined = false
-                        }
+                        if (!joined) { lStart = out.length; lTok = tok; lRa = (tok == "z" && wasRa) }
                         out.append(cons)
-                        phala = joined && (cons[0] == RA || cons[0] == YA)
+                        phala = joined && (cons[0] == 'র' || cons[0] == 'য')
                     }
                     lastLetter = cons[cons.length - 1]
                     raInitial = tok == "r" && startsWord
-                    lastConsTok = tok
+                    last = tok
                     consAfter = true; wordStart = false
                     i += len; matched = true; break
                 }
                 val v = vowels[tok]
                 if (v != null) {
-                    out.append(if (consAfter) v.second else v.first)
+                    if (consAfter && !wasShift) { lVowSt = out.length; lVowInd = v.first }
+                    out.append(if (consAfter && !wasShift) v.second else v.first)
                     // ব্যঞ্জনের পরে একা 'o' অদৃশ্য — শেষ কী হলে মার্কার দেখাই
-                    if (tok == "o" && consAfter && i + len == src.length) pending = 'o'
+                    if (tok == "o" && consAfter && i + len == n) pending = 'o'
                     consAfter = false; wordStart = false
                     i += len; matched = true; break
                 }
@@ -341,14 +326,14 @@ object BanglaPhonetic {
         var marker = ' '
         if (preview) {
             when (pending) {
-                'o', 'q' -> { markerIndex = out.length; marker = pending; out.append(pending) }
+                'o', 'q', 's' -> { markerIndex = out.length; marker = pending; out.append(pending) }
                 'Q' -> { markerIndex = out.length - 1; marker = 'q' }
             }
         }
         return Preview(out.toString(), markerIndex, marker, consAfter)
     }
 
-    /** শব্দের শেষে ব্যঞ্জন আছে (শিফট/` দিয়ে জোর-যুক্ত করা যায়)? */
+    /** শব্দের শেষে ব্যঞ্জন আছে? (পুরনো API: শিফট দিয়ে জোর-যুক্ত করা যায় কি) */
     fun canForceJoin(buffer: String): Boolean = run(buffer, false).endsWithConsonant
 
     // ---------- পরের কী-এর ইঙ্গিত ----------

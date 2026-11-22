@@ -14,8 +14,10 @@ class BanglaPhoneticTest {
         var n = 0
         stream.bufferedReader(Charsets.UTF_8).forEachLine { line ->
             if (line.isBlank() || line.startsWith("#")) return@forEachLine
-            val (typed, expected) = line.split('\t')
+            val (typed0, expected) = line.split('\t')
             n++
+            // ⇧ = শিফট (যুক্ত কী) ট্যাপ = বাফারে SH টোকেন
+            val typed = typed0.replace('⇧', BanglaPhonetic.SH)
             val got = BanglaPhonetic.convert(typed)
             if (nfc(got) != nfc(expected)) failures.add("$typed -> $got (expected $expected)")
         }
@@ -23,15 +25,38 @@ class BanglaPhoneticTest {
     }
 
     @Test
-    fun forceJoinKey() {
-        // শিফট (`) শুধু ব্যঞ্জনের পর কাজ করে
+    fun shiftKey() {
+        val sh = BanglaPhonetic.SH
+        // শিফট ট্যাপ: ব্যঞ্জনের আগে জোর-যুক্ত, স্বরের আগে স্বাধীন স্বর
+        assertEquals(nfc("ক্ফ"), nfc(BanglaPhonetic.convert("k${sh}f")))
+        assertEquals(nfc("ন্ক"), nfc(BanglaPhonetic.convert("n${sh}k")))
+        assertEquals(nfc("কফ"), nfc(BanglaPhonetic.convert("kf")))
+        assertEquals(nfc("বই"), nfc(BanglaPhonetic.convert("bo${sh}i")))
+        // বারবার চাপলেও একটি
+        assertEquals(nfc("ত্ত"), nfc(BanglaPhonetic.convert("t${sh}${sh}t")))
+        // মার্কার s
+        val p = BanglaPhonetic.preview("t$sh")
+        assertEquals('s', p.marker)
         assertEquals(true, BanglaPhonetic.canForceJoin("k"))
-        assertEquals(true, BanglaPhonetic.canForceJoin("nk"))
         assertEquals(false, BanglaPhonetic.canForceJoin("ka"))
-        assertEquals(false, BanglaPhonetic.canForceJoin(""))
-        assertEquals(nfc("ক্ফ"), nfc(BanglaPhonetic.convert("k`f")))
-        assertEquals(nfc("ন্ক"), nfc(BanglaPhonetic.convert("n`k")))
-        assertEquals(nfc("কভ"), nfc(BanglaPhonetic.convert("kbh")))
+    }
+
+    @Test
+    fun nonGreedyCases() {
+        val stream = javaClass.classLoader!!.getResourceAsStream("typing_cases_nongreedy.tsv")!!
+        BanglaPhonetic.greedy = false
+        try {
+            val bad = ArrayList<String>()
+            stream.bufferedReader(Charsets.UTF_8).forEachLine { line ->
+                if (line.isBlank() || line.startsWith("#")) return@forEachLine
+                val (typed0, expected) = line.split('\t')
+                val got = BanglaPhonetic.convert(typed0.replace('⇧', BanglaPhonetic.SH))
+                if (nfc(got) != nfc(expected)) bad.add("$typed0 -> $got (expected $expected)")
+            }
+            assertEquals(bad.joinToString("\n"), 0, bad.size)
+        } finally {
+            BanglaPhonetic.greedy = true
+        }
     }
 
     @Test
